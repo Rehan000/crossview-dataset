@@ -1,0 +1,18 @@
+# Ignore large datasets
+data/
+outputs/
+*.tif
+*.png
+*.jsonl
+*.parquet
+*.zip
+
+# Python stuff
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Environment files
+*.log
+.DS_Store

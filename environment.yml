@@ -1,0 +1,36 @@
+name: crossview
+channels:
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - python=3.10
+  - geopandas
+  - h5py
+  - matplotlib
+  - numpy
+  - opencv
+  - pyproj
+  - rasterio
+  - requests
+  - scikit-image
+  - shapely
+  - tqdm
+  - jupyter
+  - fiona
+  - gdal
+  - pyogrio
+  - pyarrow
+  - pandas
+  - rioxarray
+  - xarray
+  - planetary-computer
+  - pystac-client
+  - stackstac
+  - pydeck
+  - streamlit
+  - folium
+  - streamlit-folium
+  - imageio
+  - pyrender
+  - trimesh
+prefix: /home/rehan/anaconda3/envs/crossview
