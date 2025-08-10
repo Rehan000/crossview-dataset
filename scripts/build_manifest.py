@@ -17,6 +17,10 @@ def list_layers_safely(gpkg_path: Path) -> list[str]:
         return []
 
 def mapillary_counts_and_times(meta_parquet: Path) -> tuple[int | None, list[str | None]]:
+    """
+    Returns (row_count, [iso_start, iso_end]) for the given parquet.
+    Falls back gracefully if file or columns are missing.
+    """
     if not meta_parquet.exists():
         return None, [None, None]
     try:
@@ -26,6 +30,7 @@ def mapillary_counts_and_times(meta_parquet: Path) -> tuple[int | None, list[str
     if "captured_at_utc" in df.columns:
         s = pd.to_datetime(df["captured_at_utc"], errors="coerce")
     elif "captured_at" in df.columns:
+        # Mapillary Graph 'captured_at' often ms since epoch
         s = pd.to_datetime(df["captured_at"], errors="coerce", unit="ms")
     else:
         s = pd.Series(dtype="datetime64[ns]")
@@ -45,6 +50,17 @@ def best_bounds_from_gpkg(gpkg_path: Path) -> tuple[list[float] | None, list[str
             except Exception:
                 continue
     return None, layers
+
+def count_jpegs(dir_path: Path) -> int | None:
+    """
+    Count *.jpg files in a directory. Returns None if directory doesn't exist.
+    """
+    if not dir_path.exists():
+        return None
+    try:
+        return sum(1 for _ in dir_path.glob("*.jpg"))
+    except Exception:
+        return None
 
 def main():
     ap = argparse.ArgumentParser()
@@ -97,10 +113,21 @@ def main():
 
     # --- Mapillary ---
     mdir = mapillary_root / tile
+    images_dir = mdir / "images"
+    images_clean_dir = mdir / "images_clean"
+    images_full_dir = mdir / "images_full"
+    images_full_clean_dir = mdir / "images_full_clean"
+
     meta_parquet = mdir / "meta_28992.parquet"
     meta_clean_parquet = mdir / "meta_clean.parquet"
     count_raw, span_raw = mapillary_counts_and_times(meta_parquet)
     count_clean, span_clean = mapillary_counts_and_times(meta_clean_parquet)
+
+    # File counts in each images directory (thumbs & full-res)
+    n_images = count_jpegs(images_dir)
+    n_images_clean = count_jpegs(images_clean_dir)
+    n_images_full = count_jpegs(images_full_dir)
+    n_images_full_clean = count_jpegs(images_full_clean_dir)
 
     # --- Tile polygon ---
     poly = tile_polygon(tile)
@@ -126,10 +153,20 @@ def main():
         },
         "mapillary": {
             "dir": str(mdir) if mdir.exists() else None,
-            "images_dir": str(mdir / "images") if (mdir / "images").exists() else None,
+            "images_dir": str(images_dir) if images_dir.exists() else None,
+            "images_clean_dir": str(images_clean_dir) if images_clean_dir.exists() else None,
+            "images_full_dir": str(images_full_dir) if images_full_dir.exists() else None,
+            "images_full_clean_dir": str(images_full_clean_dir) if images_full_clean_dir.exists() else None,
             "meta_parquet": str(meta_parquet) if meta_parquet.exists() else None,
             "meta_clean_parquet": str(meta_clean_parquet) if meta_clean_parquet.exists() else None,
-            "counts": {"raw": count_raw, "clean": count_clean},
+            "counts": {
+                "raw": count_raw,
+                "clean": count_clean,
+                "images": n_images,
+                "images_clean": n_images_clean,
+                "images_full": n_images_full,
+                "images_full_clean": n_images_full_clean,
+            },
             "time_spans": {"raw": span_raw, "clean": span_clean},
         },
     }

@@ -1,5 +1,5 @@
 # scripts/make_clean_subset.py
-import argparse, json
+import argparse, json, os, shutil
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +31,6 @@ def _load_points(tile_dir: Path) -> gpd.GeoDataFrame:
     if pq.exists():
         df = pd.read_parquet(pq)
     else:
-        # fall back to jsonl (compute projected if missing)
         rows = [json.loads(l) for l in open(jl) if l.strip()]
         df = pd.DataFrame(rows)
         if not {"x_28992","y_28992"}.issubset(df.columns):
@@ -50,7 +49,12 @@ def main():
     ap.add_argument("--map-root", default="data/amsterdam/mapillary")
     ap.add_argument("--layer", default=DEFAULT_LAYER)
     ap.add_argument("--dist-thresh-m", type=float, default=30.0, help="keep if dist_to_bldg_m <= thresh")
-    ap.add_argument("--symlink-images", action="store_true", help="create images_clean/ with symlinks")
+    ap.add_argument("--symlink-images", action="store_true", help="create clean image dir with symlinks (or copy)")
+    ap.add_argument("--source-dir", default="images",
+                    help="Source image dir inside the tile (e.g., 'images' or 'images_full'). Default: images")
+    ap.add_argument("--dest-name", default="images_clean",
+                    help="Destination clean dir name (e.g., 'images_clean' or 'images_full_clean'). Default: images_clean")
+    ap.add_argument("--copy", action="store_true", help="Copy files instead of symlinking")
     args = ap.parse_args()
 
     tile = args.tile_id
@@ -96,22 +100,40 @@ def main():
     print(f"[i] Wrote {out_parq}")
     print(f"[i] Wrote {out_jsonl}")
 
-    # optional: symlink thumbnails
+    # optional: create clean image dir
     if args.symlink_images:
-        img_dir = tile_dir / "images"
-        out_img = tile_dir / "images_clean"
-        out_img.mkdir(exist_ok=True)
-        import os
+        src_dir = tile_dir / args.source_dir
+        if not src_dir.exists():
+            raise SystemExit(f"Source dir not found: {src_dir}")
+        out_img = tile_dir / args.dest_name
+        out_img.mkdir(parents=True, exist_ok=True)
+
+        created, missing, skipped = 0, 0, 0
         for img_id in clean["id"].astype(str):
-            src = img_dir / f"{img_id}.jpg"
-            if src.exists():
-                dst = out_img / f"{img_id}.jpg"
+            src = src_dir / f"{img_id}.jpg"
+            dst = out_img / f"{img_id}.jpg"
+            if not src.exists():
+                missing += 1
+                continue
+            if dst.exists():
+                skipped += 1
+                continue
+            try:
+                if args.copy:
+                    shutil.copy2(src, dst)
+                else:
+                    os.symlink(src.resolve(), dst)
+                created += 1
+            except Exception:
+                # fallback to copy if symlink not permitted
                 try:
-                    if not dst.exists():
-                        os.symlink(src.resolve(), dst)
-                except FileExistsError:
-                    pass
-        print(f"[i] Symlinked thumbnails to {out_img}")
+                    shutil.copy2(src, dst)
+                    created += 1
+                except Exception:
+                    missing += 1  # count as missing/failure
+
+        print(f"[i] Clean images created: {created} → {out_img} "
+              f"(source={args.source_dir}, missing={missing}, already existed={skipped})")
 
 if __name__ == "__main__":
     main()
